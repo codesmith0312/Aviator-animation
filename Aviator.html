@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parabolic Jet Animation</title>
+    <style>
+        canvas {
+            display: block;
+            margin: 0 auto;
+            transition: background-image 5s ease;
+            background-color: #000000b4;
+            background-image: radial-gradient(rgba(0, 0, 0, 0.384) 0%,rgba(0, 0, 0, 0.808) 0%);
+            /* color:#868686 */
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="wrapper" style="width: 40%" style="aspect-ratio: 1/0.7;">
+        <canvas id="parabolicCanvas" width="800" height="500"></canvas>
+    </div>
+  <button onclick="createBet()">bet</button>
+<script>
+ class JetAnimation {
+        status="ENDED";
+        constructor(canvas, canvasWrapper) {
+            this.canvas = canvas;
+            this.canvasWrapper= canvasWrapper;
+            this.ctx = this.canvas.getContext("2d");
+
+            this.startX = this.canvas.width * 0.1;
+            this.startY = this.canvas.height * 0.9;
+            this.endX = this.canvas.width * 0.8;
+            this.endY = this.canvas.height * 0.2;
+            this.bgR=0;
+            this.a = (this.endY - this.startY) / Math.pow(this.endX - this.startX, 2);
+            this.startedAt = Date.now();
+            this.animStartedTime=Date.now();
+            this.trailColor="#e505398e";
+            this.trailFillColor = "#e50539";
+
+            this.xrule = [];
+            this.yrule = [];
+
+            this.currentStage = 0;  
+            this.colorStages = [
+                { color: { r: 0, g: 0, b: 0,a: 0.384 }, duration: 2000 }, // Black to Blue  
+                { color: { r: 2, g: 130, b: 190,a: 0.767 }, duration: 2000 }, // Blue to Orange  
+                { color: { r: 159, g: 2, b: 190,a: 0.767 }, duration: 2000 }, // Orange to Black  
+            ];  
+
+            this.jet={
+                x:this.startX,
+                y:this.startY
+            }
+            this.duration = 9 * 1000; // 10 seconds  
+            this.halfDuration = 7000; // 7 seconds  
+            this.animationState = 'parabola';
+            this.backgroundAlpha = 0;
+            this.backgroundRadius = 0;
+            this.resizeCanvas();
+
+            // Bind methods  
+            this.animateJetOnParabola = this.animateJetOnParabola.bind(this);
+            this.moveJetUpAndDown = this.moveJetUpAndDown.bind(this);
+            this.drawJet = this.drawJet.bind(this);
+            this.drawParabola = this.drawParabola.bind(this);
+            this.handleResize = this.handleResize.bind(this);
+            this.drawRealyGame=this.drawRealyGame.bind(this);
+            this.moveJetEnd=this.moveJetEnd.bind(this);
+            this.drawRealyGame();
+            window.addEventListener('resize', this.handleResize);
+            setInterval(()=>{
+                this.loop()
+            },1000/60)
+        }
+        
+
+        drawRealyGame(){
+            if (this.status == "ENDED"|| this.status == "READY") {
+                this.jet={
+                    x:this.startX,
+                    y:this.startY
+                }
+                this.xrule=[];
+                this.yrule=[];
+                this.status="READY";
+                return true;
+            }
+            return false;
+        }
+
+        startAnimation(){
+            if(this.status=="READY"){
+                this.drawRealyGame();
+                this.startedAt = Date.now();
+                this.animStartedTime = Date.now();
+                this.animationState = 'parabola';
+                this.status="PLAYING";
+                return true;
+            }
+            return false;
+        }
+
+        stopAnimation(){
+            if (this.status == "PLAYING") {
+                this.status = "END";
+                return true;
+            }
+            return false;
+        }
+
+        resizeCanvas() {
+            const ract= this.canvasWrapper.getBoundingClientRect();
+            this.canvas.width =ract.width;
+            this.canvas.height = ract.height;
+            this.startX = this.canvas.width * 0.04;
+            this.startY = this.canvas.height * 0.95;
+            this.endX = this.canvas.width * 0.8;
+            this.endY = this.canvas.height * 0.2;
+            this.a = (this.endY - this.startY) / Math.pow(this.endX - this.startX, 2);
+        }
+
+        getParabola(x) {
+            return this.a * Math.pow(x - this.startX, 2) + this.startY;
+        }
+
+        easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : (t - 1) * (t - 1) * (t - 1) * 4 + 1;
+        }
+
+        easeOutCubic(t) {
+            return (t - 1) * (t - 1) * (t - 1) + 1;
+        }
+        // Ease In and Out: Accelerates then decelerates smoothly  
+         easeInOutQuint(t) {
+                if (t < 0.5) {
+                    return 16 * t * t * t * t * t; // 16 * (t^5) on the first half  
+                } else {
+                    return (t - 1) * (t - 1) * (t - 1) * (t - 1) * (t - 1) * 16 + 1; // 1 + 16 * (t-1)^5 on the second half  
+                }
+        }  
+
+        // Easing function for bounce effect  
+        easeOutBounce(t) {
+                const n1 = 7.5625;
+                const d1 = 2.75;
+                if (t < 1 / d1) {
+                    return n1 * t * t; // First case  
+                } else if (t < 2 / d1) {
+                    t -= 1.5 / d1;
+                    return n1 * t * t + 0.75; // Second case  
+                } else if (t < 2.5 / d1) {
+                    t -= 2.25 / d1;
+                    return n1 * t * t + 0.9375; // Third case  
+                } else {
+                    t -= 2.625 / d1;
+                    return n1 * t * t + 0.984375; // Fourth case  
+                }
+        } 
+
+        // Sine In and Out Easing Function  
+        easeInOutSine(t) {
+                return 0.5 * (1 - Math.cos(Math.PI * t));
+        }  
+        // Sine Out Easing Function  
+         easeOutSine(t) {
+                return Math.sin(t * (Math.PI / 2));
+        }  
+
+        loop(){
+            if(this.status=="PLAYING"){
+                this.updateRule();
+                if(this.animationState==="parabola"){
+                    this.animateJetOnParabola();
+                }else {
+                    this.moveJetUpAndDown();
+                }
+            }else if(this.status==="END"){
+                if(this.moveJetEnd()){
+                    this.status="ENDED";
+                };
+            }
+            this.draw();
+        }
+
+        draw(){
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.drawBackground();
+            if (this.status == "PLAYING") {
+                this.drawRule();
+                this.drawParabola();
+            }
+            if(this.status!=="ENDED"){
+                this.drawJet();
+            }
+        }
+
+        updateRule(){
+            let xstep = (this.canvas.width - this.startX) / 10;
+            let ystep = this.startY / 10;
+            if(!this.xrule.length){
+                for (let i = 0; i < 10; i++) {
+                    this.xrule.push(this.startX + (xstep * i));
+                    this.yrule.push(this.startY - (ystep * i))
+                }
+            }else if(this.animationState !== "parabola"){
+                let xspeed=xstep/100;
+                let yspeed=ystep/100;
+                for(let i=0;i<10;i++){
+                    this.xrule[i] -= xspeed;
+                    this.yrule[i] += yspeed;
+
+                    if(this.xrule[i]<this.startX){
+                        this.xrule[i]= this.startX + (xstep * 10)
+                    }
+                    if (this.yrule[i] > this.startY) {
+                        this.yrule[i] = this.startY - (ystep * 10)
+                    }
+                }
+            }
+        }
+
+        animateJetOnParabola() {
+            let t = Date.now() - this.startedAt;
+            let normalizedTime = t / this.duration;
+            normalizedTime = this.easeInOutSine(normalizedTime);
+            this.jet.x = this.startX + (this.endX - this.startX) * normalizedTime;
+            this.jet.y = this.getParabola(this.jet.x);
+            if (t > this.duration) {
+                this.animStartedTime = Date.now();
+                this.animationState = 'down';
+            }
+        }
+
+        moveJetUpAndDown() {
+            let t = Date.now() - this.animStartedTime;
+            let h = this.canvas.height * 0.35;
+            let w = this.canvas.width * 0.9;
+            const totalXMovement = w - this.endX;
+            const totalYMovement = h - this.endY;
+
+            let x, y;
+
+            if (this.animationState === 'up') {
+                if (t > this.halfDuration) {
+                    this.animStartedTime = Date.now();
+                    this.animationState = 'down';
+                }
+                y = h - totalYMovement * this.easeInOutCubic(t / this.halfDuration);
+                x = w - totalXMovement * this.easeInOutCubic(t / this.halfDuration);
+            } else if (this.animationState === 'down') {
+                if (t > this.halfDuration) {
+                    this.animStartedTime = Date.now();
+                    this.animationState = 'up';
+                }
+                y = this.endY + totalYMovement * this.easeInOutCubic(t / this.halfDuration);
+                x = this.endX + totalXMovement * this.easeInOutCubic(t / this.halfDuration);
+            }
+
+            this.jet={x,y};
+        }
+
+        moveJetEnd(){
+            if (this.canvas.width > this.jet.x && 0 < this.jet.y) {
+                this.jet.x = this.jet.x + 7;
+                this.jet.y = this.jet.y - 2.5;
+                return false;
+            }else{
+                return true;
+            }
+        }
+
+        drawJet() {
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.fillStyle = "red";
+            this.ctx.arc(this.jet.x, this.jet.y, 5, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.stroke();
+            this.ctx.restore();
+        }
+
+        drawRule(){
+            this.ctx.save();
+            this.ctx.strokeStyle="#c0c0c0";
+            this.ctx.lineWidth=this.canvas.width*0.002;
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.startX,this.startY);
+            this.ctx.lineTo(this.startX, 0);
+            this.ctx.stroke();
+            this.ctx.closePath();
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.startX, this.startY);
+            this.ctx.lineTo(this.canvas.width, this.startY);
+            this.ctx.stroke();
+            this.ctx.closePath();
+
+            let r= this.canvas.width * 0.0025;
+            for(let i=0;i<10;i++){
+                this.ctx.beginPath();
+                this.ctx.arc(this.xrule[i],this.startY+10, r, 0, Math.PI*2);
+                this.ctx.fillStyle="white";
+                this.ctx.fill();
+                this.ctx.closePath();
+                this.ctx.beginPath();
+                this.ctx.arc(this.startX-10, this.yrule[i], r, 0, Math.PI * 2);
+                this.ctx.fillStyle = "white";
+                this.ctx.fill();
+                this.ctx.closePath();
+            }
+
+            this.ctx.restore();
+        }
+
+
+        drawParabola() {
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = "#e60000";
+            this.ctx.lineWidth = this.canvas.width*0.006;
+            this.ctx.lineCap = "butt";
+
+            this.ctx.moveTo(this.startX, this.startY);
+            this.ctx.quadraticCurveTo((this.jet.x +this.startX) * 0.5, this.startY + (this.startY / this.jet.y) , this.jet.x, this.jet.y);
+            this.ctx.stroke();
+            this.ctx.closePath();
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.startX, this.startY);
+            this.ctx.quadraticCurveTo((this.jet.x + this.startX) * 0.5, this.startY + (this.startY / this.jet.y), this.jet.x, this.jet.y);
+            this.ctx.lineTo(this.jet.x,this.startY);
+            this.ctx.fillStyle = "#e600008c";
+            this.ctx.fill();
+            this.ctx.closePath();
+            this.ctx.restore();
+        }
+
+        drawBackground() {
+                this.ctx.save();
+                this.ctx.translate(0, this.canvas.height);
+                this.ctx.rotate((Math.PI / 180)*this.bgR);
+                const numberOfSlices = 72;
+                const sliceAngle = (2 * Math.PI) / numberOfSlices;
+                this.ctx.globalAlpha=0.8;
+                let radius = this.canvas.width * 2;
+                this.backgroundRadius=radius
+                if(this.backgroundRadius>0.1){
+                    for (let i = 0; i < numberOfSlices; i++) {
+                        if(i % 2){
+                            this.ctx.beginPath();
+                            const angleStart = i * sliceAngle;
+                            this.ctx.fillStyle = "black";
+                            this.ctx.moveTo(0, 0);  
+                            this.ctx.lineTo(Math.cos(angleStart) * this.backgroundRadius, Math.sin(angleStart) * this.backgroundRadius);
+                            this.ctx.lineTo(Math.cos(angleStart + sliceAngle) * this.backgroundRadius, Math.sin(angleStart + sliceAngle) *  this.backgroundRadius);
+                            this.ctx.closePath();
+                            this.ctx.fill();
+                        }
+                    }
+                }
+                if(this.status=="PLAYING"){
+                    this.bgR+=0.1;
+                    if(this.bgR>360){
+                        this.bgR=0;
+                    }
+                }
+                this.ctx.restore();
+                let currentColor = this.animationState == "parabola" ? this.colorStages[1].color : this.colorStages[2].color; 
+                if(this.status=="PLAYING"){
+                    this.backgroundAlpha += (70-this.backgroundAlpha)*.1;
+                }else{
+                    this.backgroundAlpha -=this.backgroundAlpha *.07;
+                }
+                this.canvas.style=`background-image: radial-gradient(rgba(${currentColor.r}, ${currentColor.g}, ${currentColor.b}, ${this.backgroundAlpha/100}) 0%,rgba(0, 0, 0, 0.808) ${this.backgroundAlpha}%);`;
+        }
+
+        handleResize() {
+            this.resizeCanvas();
+        }
+    }
+
+    const jetAnimation = new JetAnimation(document.getElementById('parabolicCanvas'),document.getElementById("wrapper"));
+    jetAnimation.drawRealyGame();
+    setTimeout(()=>{
+        jetAnimation.startAnimation();
+        setTimeout(()=>{
+            jetAnimation.stopAnimation()
+        },Math.random()*16000)
+    },2000)
+
+    function createBet(){
+        if(jetAnimation.drawRealyGame()){
+            setTimeout(() => {
+                if(jetAnimation.startAnimation()){
+                    setTimeout(() => {
+                        jetAnimation.stopAnimation()
+                    }, Math.random() * 16000)
+                }
+            }, 2000)
+        }
+    }
+</script>
+</body>
+
+</html>
